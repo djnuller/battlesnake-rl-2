@@ -79,4 +79,4 @@ def main(start_model=None):
 
 if __name__ == "__main__":
     # Start fra model_gen1_3.zip og juster evalueringskampe
-    main(start_model=os.path.join(MODELS_DIR, "model_gen1_3.zip"))
+    main(start_model=os.path.join(MODELS_DIR, "trained_model.zip"))
