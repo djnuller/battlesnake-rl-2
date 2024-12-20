@@ -1,0 +1,6 @@
+gym==0.26.2
+numpy==1.24.4
+stable-baselines3>=1.8.0
+torch
+torchvision
+shimmy>=2.0
