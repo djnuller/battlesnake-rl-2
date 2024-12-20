@@ -5,7 +5,7 @@ import numpy as np
 app = Flask(__name__)
 
 # Indlæs den trænede model
-MODEL_PATH = "model_gen40_2.zip"
+MODEL_PATH = "model_gen1_1.zip"
 model = PPO.load(MODEL_PATH)
 
 # Funktion til at konvertere Battlesnake API-data til observationsformat
@@ -13,30 +13,32 @@ def create_observation(data):
     board = data["board"]
     width, height = board["width"], board["height"]
 
-    observation = np.zeros((height, width), dtype=np.int32)
+    # Spejl y-koordinaten
+    def flip_y(y):
+        return height - 1 - y
 
-    # Placér din slange
-    you = data["you"]
+    observation = np.zeros((height, width), dtype=np.int32)
 
     # Placér modstandere
     for snake in board["snakes"]:
-        if snake["id"] != you["id"]:
-            for segment in snake["body"]:
-                observation[segment["y"], segment["x"]] = 3  # Krop
-            observation[snake["head"]["y"], snake["head"]["x"]] = 4  # Hoved
+        for segment in snake["body"]:
+            observation[flip_y(segment["y"]), segment["x"]] = 4  # Krop
+        observation[flip_y(snake["head"]["y"]), snake["head"]["x"]] = 3  # Hoved
 
-
+    # Placér din slange
+    you = data["you"]
     for segment in you["body"]:
-        observation[segment["y"], segment["x"]] = 1  # Krop
-    observation[you["head"]["y"], you["head"]["x"]] = 2  # Hoved
-
-
+        observation[flip_y(segment["y"]), segment["x"]] = 2  # Krop
+    observation[flip_y(you["head"]["y"]), you["head"]["x"]] = 1  # Hoved
 
     # Placér mad
     for food in board["food"]:
-        observation[food["y"], food["x"]] = 5
+        observation[flip_y(food["y"]), food["x"]] = 5
+
+    print(observation)
 
     return observation.flatten()
+
 
 @app.route("/", methods=["GET"])
 def index():
@@ -66,6 +68,7 @@ def move():
     # Konverter numerisk handling til retning
     actions = ["up", "down", "left", "right"]
     direction = actions[action]
+    print(direction)
 
     return jsonify({"move": direction})
 
