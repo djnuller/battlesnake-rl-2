@@ -42,71 +42,92 @@ class BattlesnakeEnv(gymnasium.Env):
 
     def step(self, action):
         """Tag et trin i miljøet."""
-        # Spilleren slanges handling
         direction = self._get_direction(action)
         new_head = {"x": self.snake[0]["x"] + direction["x"], "y": self.snake[0]["y"] + direction["y"]}
 
-        # Tjek for kollision med vægge eller egen krop
-        if not self._is_within_bounds(new_head) or new_head in self.snake:
-            self.done = True
-            step_data = {
-                "you": {
-                    "head": {"x": self.snake[0]["x"], "y": self.snake[0]["y"]},
-                    "health": 0,  # Indikerer død
-                    "body": self.snake,
-                    "name": "PlayerSnake",
-                },
-                "turn": self.steps,
-            }
-            reward = self._calculate_reward(step_data)
-            return self._get_observation(), reward, True, False, {}
-
-        # Opdater spillerens slange
-        self.snake.insert(0, new_head)
-        if new_head == self.food:
-            self.food = self._generate_food()
-        else:
-            self.snake.pop()
-
-        # Skab step_data for belønningsberegning
-        step_data = {
-            "you": {
-                "head": new_head,
-                "health": self.health - 1,  # Justér for hver tur
-                "body": self.snake,
-                "name": "PlayerSnake",
-            },
-            "board": {
-                "food": [{"x": self.food["x"], "y": self.food["y"]}],
-                "snakes": [
-                    {"id": "OpponentSnake", "body": self.opponent.body},
-                    {"id": "PlayerSnake", "body": self.snake},
-                ],
-            },
-            "turn": self.steps,
-        }
-
-        # Tjek for vinder
-        if self.steps >= 1000 or len(self.opponent.body) == 0:
-            step_data["winnerName"] = "PlayerSnake"
-
-        # Beregn belønning
-        reward = self._calculate_reward(step_data)
-
-        # Opdater modstanderen
-        opponent_action = self.opponent.get_action(self._create_board())
+        # Modstanderen foretager et træk
+        opponent_board = self._get_observation().reshape(self.height, self.width)  # Sørg for 2D-format
+        opponent_action = self.opponent.get_action(opponent_board)
         opponent_direction = self._get_direction(opponent_action)
         opponent_new_head = {
             "x": self.opponent.head["x"] + opponent_direction["x"],
             "y": self.opponent.head["y"] + opponent_direction["y"],
         }
+
+        # Tjek for kollisioner (spilleren)
+        player_collision = (
+            not self._is_within_bounds(new_head) or  # Væg
+            new_head in self.snake or              # Egen krop
+            new_head in self.opponent.body         # Modstanderens krop
+        )
+
+        # Tjek for kollisioner (modstanderen)
+        opponent_collision = (
+            not self._is_within_bounds(opponent_new_head) or  # Væg
+            opponent_new_head in self.opponent.body or       # Egen krop
+            opponent_new_head in self.snake                  # Spillerens krop
+        )
+
+        # Opret step_data til belønningsberegning
+        step_data = {
+            "you": {
+                "head": new_head,
+                "health": self.health,
+                "body": self.snake,
+                "name": "PlayerSnake"
+            },
+            "board": {
+                "width": self.width,
+                "height": self.height,
+                "food": [{"x": self.food["x"], "y": self.food["y"]}],
+                "snakes": [
+                    {"id": "PlayerSnake", "body": self.snake, "head": new_head},
+                    {"id": "OpponentSnake", "body": self.opponent.body, "head": opponent_new_head}
+                ]
+            },
+            "turn": self.steps
+        }
+
+        # Håndter kollisioner
+        if player_collision:
+            self.done = True
+            step_data["you"]["health"] = 0  # Spiller død
+            reward = self._calculate_reward(step_data)
+            return self._get_observation(), reward, self.done, False, {}
+
+        if opponent_collision:
+            self.done = True
+            step_data["winnerName"] = "PlayerSnake"  # Spiller vinder
+            reward = self._calculate_reward(step_data)
+            return self._get_observation(), reward, self.done, False, {}
+
+        # Opdater spillerens slange
+        self.snake.insert(0, new_head)
+        if new_head == self.food:
+            reward = 10  # Belønning for mad
+            self.food = self._generate_food()
+        else:
+            reward = 1  # Belønning for at overleve
+            self.snake.pop()
+
+        # Opdater modstanderen
         self.opponent.move(opponent_new_head)
 
-        # Tjek for afslutning af spillet
-        self.done = self.steps >= 1000
+        # Opdater antal træk og sundhed
+        self.health -= 1
         self.steps += 1
 
+        # Slut spillet kun efter et maksimalt antal træk
+        if self.steps >= 100 or self.health <= 0:
+            self.done = True
+
+        # Beregn reward fra `_calculate_reward`
+        reward += self._calculate_reward(step_data)
+
         return self._get_observation(), reward, self.done, False, {}
+
+
+
 
 
     def _get_observation(self):
@@ -189,22 +210,21 @@ class BattlesnakeEnv(gymnasium.Env):
                 if 'you' in step_data and 'head' in step_data['you']:
                     head_position = (step_data['you']['head']['x'], step_data['you']['head']['y'])
                     if head_position in food_positions:
-                        reward += 15  # Øget belønning for at spise mad
+                        reward += 50  # Stor belønning for at spise mad
 
             # Straf for at dø
             if 'you' in step_data and 'health' in step_data['you']:
                 if step_data['you']['health'] <= 0:
-                    reward -= 200  # Forhøjet straf for at dø
+                    reward -= 1000  # Hårdere straf for at dø
 
             # Belønning for at vinde
             if 'winnerName' in step_data and 'you' in step_data and 'name' in step_data['you']:
                 if step_data['winnerName'] == step_data['you']['name']:
-                    reward += 500  # Forstør belønning for at vinde spillet
+                    reward += 2000  # Stor belønning for at vinde spillet
 
             # Belønning for overlevelse
             if 'turn' in step_data and step_data['turn'] > 0:
-                survival_reward = 0.5 + (step_data['turn'] * 0.01)
-                reward += survival_reward
+                reward += 1  # Konstant belønning for at overleve
 
             # Straf for farlige positioner
             if 'you' in step_data and 'head' in step_data['you'] and 'board' in step_data and 'snakes' in step_data['board']:
@@ -212,26 +232,36 @@ class BattlesnakeEnv(gymnasium.Env):
                 snake_bodies = [part for snake in step_data['board']['snakes'] if 'body' in snake for part in snake['body'] if snake.get('id') != step_data['you'].get('id')]
                 own_body = step_data['you']['body'][1:]  # Undgå hovedet
                 danger_positions = [(part['x'], part['y']) for part in snake_bodies + own_body]
-                if head_position not in danger_positions:
-                    reward += 5
-                else:
-                    reward -= 20  # Øget straf for farer
 
-            # Belønning for at reducere modstanderes muligheder
-            if 'board' in step_data and 'snakes' in step_data['board']:
-                for snake in step_data['board']['snakes']:
-                    if 'id' in snake and snake['id'] != step_data['you'].get('id', None):
-                        if 'body' in snake and len(snake['body']) < len(step_data['you'].get('body', [])):
-                            reward += 10  # Øget belønning for dominans
+                # Straf for at være tæt på farer
+                danger_radius = 1  # Antal felter fra hovedet, der regnes som farlige
+                close_dangers = sum(
+                    1 for danger in danger_positions
+                    if abs(danger[0] - head_position[0]) <= danger_radius and abs(danger[1] - head_position[1]) <= danger_radius
+                )
+                reward -= close_dangers * 10  # Straf for hver fare i nærheden
 
-            # Strategisk positionering (forblive i centrum af brættet)
-            if 'you' in step_data and 'head' in step_data['you'] and 'turn' in step_data:
-                head_x, head_y = step_data['you']['head']['x'], step_data['you']['head']['y']
-                center_x, center_y = self.width // 2, self.height // 2  # Brug brættets dimensioner
-                distance_from_center = abs(head_x - center_x) + abs(head_y - center_y)
-                early_game_bonus = 15 if step_data['turn'] < 50 else 10
-                position_reward = max(0, early_game_bonus - distance_from_center)
-                reward += position_reward
+                # Straf for faktisk at ramme farer
+                if head_position in danger_positions:
+                    reward -= 500  # Stor straf for at ramme fare
 
+            # Straf for at ramme vægge
+            head_position = (step_data['you']['head']['x'], step_data['you']['head']['y'])
+            if (head_position[0] < 0 or head_position[0] >= self.width or
+                    head_position[1] < 0 or head_position[1] >= self.height):
+                reward -= 1000  # Hårdere straf for at ramme væggen
+
+            # Straf for at ramme egen krop
+            elif head_position in [(segment['x'], segment['y']) for segment in step_data['you']['body'][1:]]:
+                reward -= 1000  # Hårdere straf for at ramme egen krop
+
+            # Belønning for at holde afstand fra vægge
+            distance_to_wall = min(
+                head_position[0],  # Afstand til venstre væg
+                self.width - head_position[0] - 1,  # Afstand til højre væg
+                head_position[1],  # Afstand til top væg
+                self.height - head_position[1] - 1  # Afstand til bund væg
+            )
+            reward += distance_to_wall * 2  # Belønning for at holde sig væk fra vægge
 
         return reward

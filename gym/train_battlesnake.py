@@ -4,7 +4,7 @@ from battlesnake_env import BattlesnakeEnv
 
 env = make_vec_env(BattlesnakeEnv, n_envs=1)
 
-model = PPO("MlpPolicy", env, verbose=1, device="cpu")
+model = PPO("MlpPolicy", env, verbose=1, device="cpu", learning_rate=0.0001)
 
 model.learn(total_timesteps=100000)
 

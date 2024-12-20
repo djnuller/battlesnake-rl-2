@@ -1,10 +1,11 @@
 import os
+from re import VERBOSE
 from stable_baselines3 import PPO
 from battlesnake_env import BattlesnakeEnv
 
 # Konfigurationsparametre
 MODELS_DIR = "models"
-EVALUATION_GAMES = 200  # Reduceret antal evalueringer
+EVALUATION_GAMES = 100  # Reduceret antal evalueringer
 TRAINING_TIMESTEPS = 100000
 GENERATIONS = 100  # Antal iterationer i træningscyklussen
 
@@ -15,7 +16,7 @@ def train_model(base_model_path, new_model_path, timesteps):
     """Træn en ny model baseret på en eksisterende."""
     # Indlæs basemodellen eller opret en ny
     if base_model_path:
-        model = PPO.load(base_model_path, device='cpu')
+        model = PPO.load(base_model_path, device='cpu', learning_rate=0.001, ent_coef=0.02)
     else:
         env = BattlesnakeEnv()
         model = PPO("MlpPolicy", env, verbose=1, device='cpu')
@@ -79,4 +80,4 @@ def main(start_model=None):
 
 if __name__ == "__main__":
     # Start fra model_gen1_3.zip og juster evalueringskampe
-    main(start_model=os.path.join(MODELS_DIR, "trained_model.zip"))
+    main(start_model=os.path.join(MODELS_DIR, "model_gen5_2.zip"))
