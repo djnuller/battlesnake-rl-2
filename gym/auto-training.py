@@ -12,14 +12,38 @@ GENERATIONS = 100  # Antal iterationer i træningscyklussen
 # Sikre, at models-mappen findes
 os.makedirs(MODELS_DIR, exist_ok=True)
 
+def get_latest_model():
+    """Find the latest generation model in the models directory."""
+    models = [f for f in os.listdir(MODELS_DIR) if f.endswith(".zip")]
+    if not models:
+        return None
+
+    # Sort models by generation and model number
+    models.sort(key=lambda x: (int(x.split("_gen")[-1].split("_")[0]), int(x.split("_")[-1].split(".")[0])))
+    return os.path.join(MODELS_DIR, models[-1])
+
+def evaluate_all_models():
+    """Evaluate all models and find the best one."""
+    models = [os.path.join(MODELS_DIR, f) for f in os.listdir(MODELS_DIR) if f.endswith(".zip")]
+    if len(models) < 3:
+        return None
+
+    scores = {}
+    for model_path in models:
+        scores[model_path] = evaluate_model(model_path, EVALUATION_GAMES)
+
+    best_model_path = max(scores, key=scores.get)
+    print(f"Bedste eksisterende model: {best_model_path} med score: {scores[best_model_path]}")
+    return best_model_path
+
 def train_model(base_model_path, new_model_path, timesteps):
     """Træn en ny model baseret på en eksisterende."""
     # Indlæs basemodellen eller opret en ny
     if base_model_path:
-        model = PPO.load(base_model_path, device='cpu', learning_rate=0.001, ent_coef=0.02)
+        model = PPO.load(base_model_path, device='cpu', learning_rate=0.0003, ent_coef=0.005)
     else:
         env = BattlesnakeEnv()
-        model = PPO("MlpPolicy", env, verbose=1, device='cpu')
+        model = PPO("MlpPolicy", env, verbose=1, device='cpu', learning_rate=0.0003, ent_coef=0.005)
 
     # Initialiser miljø
     env = BattlesnakeEnv()
@@ -53,8 +77,12 @@ def evaluate_model(model_path, games):
     return avg_score
 
 def main(start_model=None):
-    # Start med en specificeret base model, hvis angivet
-    base_model_path = start_model
+    # Start med en specificeret base model, eller find den seneste model
+    base_model_path = start_model or get_latest_model()
+
+    # Hvis der er mere end 3 modeller, evaluér for at finde den bedste
+    if not start_model:
+        base_model_path = evaluate_all_models() or base_model_path
 
     for generation in range(1, GENERATIONS + 1):
         print(f"=== Generation {generation} ===")
@@ -79,5 +107,4 @@ def main(start_model=None):
         base_model_path = best_model_path
 
 if __name__ == "__main__":
-    # Start fra model_gen1_3.zip og juster evalueringskampe
-    main(start_model=os.path.join(MODELS_DIR, "model_gen5_2.zip"))
+    main()

@@ -5,7 +5,7 @@ import numpy as np
 app = Flask(__name__)
 
 # Indlæs den trænede model
-MODEL_PATH = "model_gen1_1.zip"
+MODEL_PATH = "test123.zip"
 model = PPO.load(MODEL_PATH)
 
 # Funktion til at konvertere Battlesnake API-data til observationsformat
@@ -15,7 +15,7 @@ def create_observation(data):
 
     # Spejl y-koordinaten
     def flip_y(y):
-        return height - 1 - y
+        return y #height - 1 - y
 
     observation = np.zeros((height, width), dtype=np.int32)
 
